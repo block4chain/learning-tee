@@ -35,6 +35,13 @@ Enclave的数据和代码存放在PRM中，存放这些数据和代码的内存�
 | PENDING | pending状态标识 |
 | MODIFIED | 修改状态标识 |
 
+处理器根据EPCM的信息对Enclave中的数据和代码进行保护:
+
+1. 确定将要访问的地址是否是一个EPC页
+2. 确定EPC页属于的Enclave，防止被其它Enclave的代码访问
+3. 确定EPC页的数据或代码是否可读、可写或可执行。
+4. 确定当前EPC页的状态，保证EPC页被正常使用
+
 ## 标识
 
 ### MRSIGNER
