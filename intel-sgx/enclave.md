@@ -1,5 +1,5 @@
 ---
-description: Enclave由一组EPC页组成，Intel SGX管理的基本单元
+description: Enclave由一组EPC页组成，Intel SGX管理的基本单元。
 ---
 
 # Enclave保护
@@ -29,7 +29,7 @@ Enclave的数据和代码存放在PRM中，存放这些数据和代码的内存�
 | W | 是否可写 |
 | X | 是否可执行 |
 | PT | 页类型 |
-| ENCLAVESECS | enclave sesc结构索引 |
+| ENCLAVESECS | Enclave SECS结构的内存页地址 |
 | ENCLAVEADDRESS | 该页线性虚拟地址 |
 | BLOCKED | block状态标识 |
 | PENDING | pending状态标识 |
@@ -41,6 +41,18 @@ Enclave的数据和代码存放在PRM中，存放这些数据和代码的内存�
 2. 确定EPC页属于的Enclave，防止被其它Enclave的代码访问
 3. 确定EPC页的数据或代码是否可读、可写或可执行。
 4. 确定当前EPC页的状态，保证EPC页被正常使用
+
+EPC页类型
+
+EPC内存页中存放的数据有多种不同的类型，按照数据类型将EPC页分为以下类型:
+
+| 页类型 | 数据类型和作用 |
+| :--- | :--- |
+| PT\_SECS | 存放一个Enclave控制结构数据\(SGX Enclave  Control Structure\) |
+| PT\_TCS | 存放Enclave线程控制结构数据\(Thread Control Structure\) |
+| PT\_REG | 存放常规的Enclave数据和代码 |
+| PT\_VA | 存放Version Array数据 |
+| PT\_TRIM | 表明正在从Enclave的EPC中移除 |
 
 ## 标识
 
