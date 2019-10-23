@@ -253,3 +253,7 @@ static int ksgxswapd(void *p)
 {% endcode-tabs-item %}
 {% endcode-tabs %}
 
+## 参考资料
+
+* [https://insujang.github.io/2017-04-05/intel-sgx-instructions-in-enclave-initialization/](https://insujang.github.io/2017-04-05/intel-sgx-instructions-in-enclave-initialization/)
+
