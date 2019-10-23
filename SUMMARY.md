@@ -16,6 +16,8 @@
 ## intel-sgx-driver
 
 * [EPC管理](intel-sgx-driver/intel-sgx-driver.md)
+* [虚址转换](intel-sgx-driver/xu-zhi-zhuan-huan.md)
+* [Enclave管理](intel-sgx-driver/enclave-guan-li.md)
 
 ## MesaTee
 
