@@ -558,7 +558,257 @@ static bool sgx_process_add_page_req(struct sgx_add_page_req *req,
 	list_add_tail(&epc_page->list, &encl->load_list);  //将添加的页放到enclave已加载epc页列表
 
 	return true;
-}_
+}
+```
+{% endcode-tabs-item %}
+{% endcode-tabs %}
+
+## 初始化Enclave
+
+用户进程在向enclave添加完所有的EPC页后，可以向驱动程序发起初始化请求, Enclave在完成初始化不可以继续添加EPC页:
+
+{% code-tabs %}
+{% code-tabs-item title="sgx\_ioctl.c" %}
+```c
+static long sgx_ioc_enclave_init(struct file *filep, unsigned int cmd,
+				 unsigned long arg)
+{
+	struct sgx_enclave_init *initp = (struct sgx_enclave_init *)arg;
+	unsigned long sigstructp = (unsigned long)initp->sigstruct;    //sigstruct结构
+	unsigned long einittokenp = (unsigned long)initp->einittoken;   //init token
+	unsigned long encl_id = initp->addr;
+	struct sgx_sigstruct *sigstruct;
+	struct sgx_einittoken *einittoken;
+	struct sgx_encl *encl;
+	struct page *initp_page;
+	int ret;
+
+	initp_page = alloc_page(GFP_HIGHUSER);   //在高端地址申请一个页
+	if (!initp_page)
+		return -ENOMEM;
+
+	sigstruct = kmap(initp_page); 
+	einittoken = (struct sgx_einittoken *)
+		((unsigned long)sigstruct + PAGE_SIZE / 2);
+	
+	//从用户空间复制SIGSTRUCT结构数据
+	ret = copy_from_user(sigstruct, (void __user *)sigstructp,
+			     sizeof(*sigstruct));
+	if (ret)
+		goto out;
+	//从用户空间复制init token数据
+	ret = copy_from_user(einittoken, (void __user *)einittokenp,
+			     sizeof(*einittoken));
+	if (ret)
+		goto out;
+
+	ret = sgx_get_encl(encl_id, &encl);  //获取目标enclave
+	if (ret)
+		goto out;
+
+	ret = sgx_encl_init(encl, sigstruct, einittoken);   //执行初始化流程
+
+	kref_put(&encl->refcount, sgx_encl_release);
+
+out:
+	kunmap(initp_page);
+	__free_page(initp_page);
+	return ret;
+}
+```
+{% endcode-tabs-item %}
+{% endcode-tabs %}
+
+函数调用`sgx_encl_init`方法
+
+{% code-tabs %}
+{% code-tabs-item title="sgx\_encl.c" %}
+```c
+int sgx_encl_init(struct sgx_encl *encl, struct sgx_sigstruct *sigstruct,
+		  struct sgx_einittoken *token)
+{
+	int ret;
+	int i;
+	int j;
+
+	flush_work(&encl->add_page_work);   //确保所有添加页请求被执行完
+
+	mutex_lock(&encl->lock);
+
+	if (encl->flags & SGX_ENCL_INITIALIZED) {    //init不可以重复发起
+		mutex_unlock(&encl->lock);
+		return 0;
+	}
+
+	for (i = 0; i < SGX_EINIT_SLEEP_COUNT; i++) {
+		for (j = 0; j < SGX_EINIT_SPIN_COUNT; j++) {
+			ret = sgx_einit(encl, sigstruct, token);    //调用einit汇编指令完成初始化
+
+			if (ret == SGX_UNMASKED_EVENT)
+				continue;
+			else
+				break;
+		}
+
+		if (ret != SGX_UNMASKED_EVENT)
+			break;
+
+		msleep_interruptible(SGX_EINIT_SLEEP_TIME);
+		if (signal_pending(current)) {
+			mutex_unlock(&encl->lock);
+			return -ERESTARTSYS;
+		}
+	}
+	mutex_unlock(&encl->lock);
+	if (ret) {
+		if (ret > 0)
+			sgx_dbg(encl, "EINIT returned %d\n", ret);
+		return ret;
+	}
+	encl->flags |= SGX_ENCL_INITIALIZED;
+	return 0;
+}
+```
+{% endcode-tabs-item %}
+{% endcode-tabs %}
+
+`sgx_encl_init`方法继续调用`sgx_einit`方法:
+
+{% code-tabs %}
+{% code-tabs-item title="sgx\_encl.c" %}
+```c
+static int sgx_einit(struct sgx_encl *encl, struct sgx_sigstruct *sigstruct,
+		     struct sgx_einittoken *token)
+{
+	struct sgx_epc_page *secs_epc = encl->secs.epc_page;
+	void *secs_va;
+	int ret;
+
+	secs_va = sgx_get_page(secs_epc);
+	ret = __einit(sigstruct, token, secs_va);  //调用einit指令，完成enclave初始化
+	sgx_put_page(secs_va);
+
+	return ret;
+}
+```
+{% endcode-tabs-item %}
+{% endcode-tabs %}
+
+## 清理Enclave
+
+### 进程退出
+
+在创建Encave时，驱动程序会注册一些内存管理事件:
+
+{% code-tabs %}
+{% code-tabs-item title="sgx\_encl.c" %}
+```c
+static const struct mmu_notifier_ops sgx_mmu_notifier_ops = {
+	.release	= sgx_mmu_notifier_release,   //进程被杀死后回调
+};
+
+int sgx_encl_create(struct sgx_secs *secs)
+{
+	//忽略一些代码
+	encl->mmu_notifier.ops = &sgx_mmu_notifier_ops;
+	ret = mmu_notifier_register(&encl->mmu_notifier, encl->mm); //注册内存管理事件
+	//忽略一些代码
+}
+```
+{% endcode-tabs-item %}
+{% endcode-tabs %}
+
+当前内存release事件\(进程关闭\)发生后，会调用`sgx_mmu_notifier_release`方法
+
+{% code-tabs %}
+{% code-tabs-item title="sgx\_encl.c" %}
+```c
+static void sgx_mmu_notifier_release(struct mmu_notifier *mn,
+				     struct mm_struct *mm)
+{
+	struct sgx_encl *encl =
+		container_of(mn, struct sgx_encl, mmu_notifier);
+
+	mutex_lock(&encl->lock);
+	encl->flags |= SGX_ENCL_DEAD;   //enclave被标记为DEAD状态
+	mutex_unlock(&encl->lock);
+}
+```
+{% endcode-tabs-item %}
+{% endcode-tabs %}
+
+### 引用计数
+
+Enclave内核对象存在一个引用计数, 当计数值为0时，会完成对enclave的请理:
+
+{% code-tabs %}
+{% code-tabs-item title="sgx\_encl.c" %}
+```c
+struct sgx_encl {
+	//省略一些代码
+	struct kref refcount;   //对象引用计数
+};
+
+kref_put(&encl->refcount, sgx_encl_release);
+```
+{% endcode-tabs-item %}
+{% endcode-tabs %}
+
+函数`sgx_encl_release`会完成清理
+
+{% code-tabs %}
+{% code-tabs-item title="sgx\_encl.c" %}
+```c
+void sgx_encl_release(struct kref *ref)
+{
+	struct sgx_encl_page *entry;
+	struct sgx_va_page *va_page;
+	struct sgx_encl *encl = container_of(ref, struct sgx_encl, refcount);  //获取enclave内核对象
+	struct radix_tree_iter iter;
+	void **slot;
+
+	mutex_lock(&sgx_tgid_ctx_mutex);
+	if (!list_empty(&encl->encl_list))
+		list_del(&encl->encl_list);
+	mutex_unlock(&sgx_tgid_ctx_mutex);
+
+	if (encl->mmu_notifier.ops)
+		mmu_notifier_unregister(&encl->mmu_notifier, encl->mm);  //取消内存管理事件监听
+
+	//回收EPC页
+	radix_tree_for_each_slot(slot, &encl->page_tree, &iter, 0) {
+		entry = *slot;
+		if (entry->epc_page) {
+			list_del(&entry->epc_page->list);
+			sgx_free_page(entry->epc_page, encl);   //释放EPC页
+		}
+		radix_tree_delete(&encl->page_tree, entry->addr >> PAGE_SHIFT);
+		kfree(entry);
+	}
+	//回收剩余的分配给enclave的EPC页
+	while (!list_empty(&encl->va_pages)) {
+		va_page = list_first_entry(&encl->va_pages,
+					   struct sgx_va_page, list);
+		list_del(&va_page->list);
+		sgx_free_page(va_page->epc_page, encl);
+		kfree(va_page);
+		atomic_dec(&sgx_va_pages_cnt);
+	}
+
+	if (encl->secs.epc_page)
+		sgx_free_page(encl->secs.epc_page, encl);
+
+	if (encl->tgid_ctx)
+		kref_put(&encl->tgid_ctx->refcount, sgx_tgid_ctx_release);   //解除绑定的线程组
+
+	if (encl->backing)
+		fput(encl->backing);
+
+	if (encl->pcmd)
+		fput(encl->pcmd);
+
+	kfree(encl);  //回收内核对象
+}
 ```
 {% endcode-tabs-item %}
 {% endcode-tabs %}
