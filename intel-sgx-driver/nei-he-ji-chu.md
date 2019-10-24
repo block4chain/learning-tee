@@ -30,5 +30,7 @@ description: 驱动程序使用到的一些内核技术
 | task\_tgid | 返回当前进程的TGID |
 | get\_pid | 获取进程PID, 并将引用计数+1 |
 | put\_pid | 获取进程PID, 并将引用计数-1 |
-|  |  |
+| kmap | 在高地址空间建立持久化地址映射 |
+| alloc\_workqueue | 分配一个work queue |
+| container\_of（ptr, type,member） | 通过一个结构变量中一个成员的地址找到这个结构体变量的首地址 |
 
