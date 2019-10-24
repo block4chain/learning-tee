@@ -12,6 +12,35 @@ description: Enclave由一组EPC页组成，Intel SGX管理的基本单元。
 
 Enclave的数据和代码存放在PRM中，存放这些数据和代码的内存被称为`EPC`。
 
+### 内存区域
+
+PRM被物理编码在内存的多个区块，可以通过CPUID指令查询:
+
+```c
+for (i = 0; i < SGX_MAX_EPC_BANKS; i++) {
+		cpuid_count(SGX_CPUID, i + SGX_CPUID_EPC_BANKS, &eax, &ebx,
+			    &ecx, &edx);
+		if (!(eax & 0xf))
+			break;
+
+		pa = ((u64)(ebx & 0xfffff) << 32) + (u64)(eax & 0xfffff000);
+		size = ((u64)(edx & 0xfffff) << 32) + (u64)(ecx & 0xfffff000);
+
+		dev_info(parent, "EPC bank 0x%lx-0x%lx\n", pa, pa + size);
+
+		sgx_epc_banks[i].pa = pa;
+		sgx_epc_banks[i].size = size;
+}
+```
+
+驱动程序加载日志:
+
+```text
+[    2.970981] intel_sgx: Intel SGX Driver v0.10
+[    2.971003] intel_sgx INT0E0C:00: EPC bank 0x90200000-0x95f80000
+[    2.975494] intel_sgx: second initialization call skipped
+```
+
 ### EPC
 
 `EPC`是Enclave Page Cache的简称，是PRM的一部分，enclave本身的数据和代码存放在这些内存中。EPC由一系列内存页\(4KB\)组成，Intel SGX通过`EPCM`数据结构管理这些EPC页\(EPC Page\)，并记录这些页的属性信息。
