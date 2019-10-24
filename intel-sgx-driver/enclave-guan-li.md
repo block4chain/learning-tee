@@ -92,6 +92,53 @@ static struct sgx_encl *sgx_encl_alloc(struct sgx_secs *secs)
 {% endcode-tabs-item %}
 {% endcode-tabs %}
 
+## 加载Enclave代码和数据
+
+驱动在初始化时注册了一些回调函数进行监听mmap事件，当enclave代码\(so文件\)被加载进用户地址空间时，驱动程序可以监测这些事件。
+
+{% code-tabs %}
+{% code-tabs-item title="sgx\_main.c" %}
+```c
+static const struct file_operations sgx_fops = {
+	.owner			= THIS_MODULE,
+	.unlocked_ioctl		= sgx_ioctl,
+#ifdef CONFIG_COMPAT
+	.compat_ioctl		= sgx_compat_ioctl,
+#endif
+	.mmap			= sgx_mmap,
+	.get_unmapped_area	= sgx_get_unmapped_area,
+};
+
+static struct miscdevice sgx_dev = {
+ .minor	= MISC_DYNAMIC_MINOR,
+	.name	= "isgx",
+	.fops	= &sgx_fops,
+	.mode   = 0666,
+};
+
+static int sgx_mmap(struct file *file, struct vm_area_struct *vma)
+{
+	vma->vm_ops = &sgx_vm_ops;   //事件回调函数
+	vma->vm_flags |= VM_PFNMAP | VM_DONTEXPAND | VM_DONTDUMP | VM_IO |
+			 VM_DONTCOPY;
+
+	return 0;
+}
+```
+{% endcode-tabs-item %}
+
+{% code-tabs-item title="sgx\_vma.c" %}
+```c
+const struct vm_operations_struct sgx_vm_ops = {
+	.close = sgx_vma_close, 
+	.open = sgx_vma_open,
+	.fault = sgx_vma_fault,
+	.access = sgx_vma_access,
+};
+```
+{% endcode-tabs-item %}
+{% endcode-tabs %}
+
 ## 创建Enclave
 
 用户进程通过系统调用将enclave代码\(so文件\)加载到进程的地址空间\(占用一个vma\)，然后向驱动程序发起一个创建enclave的请求\(包括一个secs结构参数\)，驱动程序处理请求代码:
@@ -737,7 +784,24 @@ static void sgx_mmu_notifier_release(struct mmu_notifier *mn,
 {% endcode-tabs-item %}
 {% endcode-tabs %}
 
-### 引用计数
+### 卸载Enclave
+
+当用户进程调用sgx\_destroy\_enclave时, enclave代码占用的虚拟内存区域被关闭，驱动程序会监听enclave虚址区域的关闭事件，并减少enclave内核对象的引用计数，从而回收EPC内存
+
+{% code-tabs %}
+{% code-tabs-item title="sgx\_vma.c" %}
+```c
+const struct vm_operations_struct sgx_vm_ops = {
+	//..
+	.close = sgx_vma_close,   //关闭事件
+	.fault = sgx_vma_fault,   //错误事件
+	//..
+};
+```
+{% endcode-tabs-item %}
+{% endcode-tabs %}
+
+## 引用计数
 
 Enclave内核对象存在一个引用计数, 当计数值为0时，会完成对enclave的请理:
 
