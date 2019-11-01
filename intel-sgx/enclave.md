@@ -134,7 +134,7 @@ Intel SGX驱动程序包含如下功能:
 * 调试模块下EPC内存页数据访问
 * ....
 
-## SESC
+## SECS
 
 ![](../.gitbook/assets/enclave_mem_layout.png)
 
@@ -234,21 +234,43 @@ MRSIGNER用于标识Enclave的代码提供者, 计算方式是对代码提供者
 
 指令将源SECS结构拷贝到目标EPC页，并在EPCM设置对应页的信息。
 
-## MRENCLAVE
+## EPC页管理
+
+使用`ECREATE`指令在EPC内存中创建SECS实例后，一个新的Enclave实例就创建成功，Intel SGX提供一些指令用于向Enclave添加新页，或者管理已有的EPC页。
+
+### EADD指令
+
+`EADD`指令向Enclave添加一个新页，指令参数包括:
+
+* 源内存页的PAGEINFO实例地址
+* 目标EPC页地址
+
+指令会将源内存的内容复制到指定的EPC页，并将EPC页的源信息更新到SECS.MRECLAVE字段。
+
+### EEXTEND指令
+
+当一个新的EPC页被添加到Enclave后，可以将页的内容更新到SECS.MRENCLAVE字段，从而保证代码和数据在构造Enclave过程中没有被篡改，EEXTEND指令可以完成这一功能，指令参数:
+
+* 目标Enclave的SECS实例地址
+* 目标EPC页中256字节内存块的地址
+
+指令一次性将EPC页的256字节大小的内存块更新到SECS.ENCLAVE字段中。
+
+## MRENCLAVE计算
 
 Measurement Register of enclave build process的简称，用来确认代码和数据在加载到Enclave过程中没有被篡改，计算结果被放在`SECS.MRENCLAVE`字段中，该值可以唯一标识一个Enclave。
 
 ```text
-secs.mr_enclave = sha2.initialization();
+secs.mrenclave = sha2.initialization();
 do
    if ECREATE:
       sesc.mr_enclave=sha2.submit(ECREATE_INFO);
    else if EADD:
-      sesc.mr_enclave=sha2.submit(EADD_INFO);
+      sesc.mrenclave=sha2.submit(EADD_INFO);
    else if EEXTEND:
-	  sesc.mr_enclave=sha2.submit(EXTEND_INFO);
+	  sesc.mrenclave=sha2.submit(EXTEND_INFO);
    else if EINIT:
-      sesc.mr_enclave=sha2.done();
+      sesc.mrenclave=sha2.done();
       break;
 done;
 ```
