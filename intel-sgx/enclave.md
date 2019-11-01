@@ -4,6 +4,42 @@ description: Enclave由一组EPC页组成，Intel SGX管理的基本单元。
 
 # Enclave机制
 
+## 数据结构
+
+### SECINFO
+
+SESCINFO关于EPC页的一些安全元信息。
+
+| 字段名 | 偏移 | 大小 | 描述 |
+| :--- | :--- | :--- | :--- |
+| FLAGS | 0 | 8 | epc页状态，参考 Flag字段 |
+| RESERVED | 8 | 56 |  |
+
+#### Flag字段
+
+| 字段名 | 位 | 描述 |
+| :--- | :--- | :--- |
+| R | 0 | 是否只读 |
+| W | 1 | 是否可写 |
+| X | 2 | 是否可执行 |
+| PENDING | 3 | 是否在Pending状态 |
+| MODIFIED | 4 | 是否在Modified状态 |
+| PR | 5 | 是否某种权限限制的操作正在执行 |
+| RESERVED | 6-7 | 保留位，必须是0 |
+| PAGE\_TYPE | 8-15 | 页类型 |
+| RESERVED | 16-63 | 保留位，必须是0 |
+
+### PAGEINFO
+
+EPC相关指令依赖`PAGEINFO`结构参数:
+
+| 字段名 | 偏移 | 大小 | 描述 |
+| :--- | :--- | :--- | :--- |
+| LINADDR | 0 | 8 | 线性地址 |
+| SRCPGE | 8 | 8 | 源页地址 |
+| SECINFO/PCMD | 16 | 8 | SECINFO地址或PCMD地址 |
+| SECS | 24 | 8 | SESC的EPC页地址 |
+
 ## PRM
 
 ![](../.gitbook/assets/memory_mapping.png)
@@ -89,6 +125,15 @@ EPC内存页中存放的数据有多种不同的类型，按照数据类型将EP
 | :--- | :--- | :--- |
 | CR\_ENCLAVE\_MODE | 1 | 处理器当前是否处于Encave执行模式 |
 
+### 驱动程序
+
+Intel SGX驱动程序包含如下功能:
+
+* EPC内存页管理: 分配、释放、回收等
+* EPC内存页页表映射管理
+* 调试模块下EPC内存页数据访问
+* ....
+
 ## SESC
 
 ![](../.gitbook/assets/enclave_mem_layout.png)
@@ -151,18 +196,7 @@ SECS.ATTIBUTES按位定义一些Encave属性，这些属性会在后续操作被
 MRENCLAVE通过计算Enclave的内容得出，可用于唯一标识一个运行中的Enclave
 
 ```bash
-secs.mr_enclave = sha2.initialization();
-do
-   if ECREATE:
-      sesc.mr_enclave=sha2.submit(ECREATE_INFO);
-   else if EADD:
-      sesc.mr_enclave=sha2.submit(EADD_INFO);
-   else if EEXTEND:
-	  sesc.mr_enclave=sha2.submit(EXTEND_INFO);
-   else if EINIT:
-      sesc.mr_enclave=sha2.done();
-      break;
-done;
+
 ```
 
 ### MRSIGNER
@@ -191,7 +225,114 @@ MRSIGNER用于标识Enclave的代码提供者, 计算方式是对代码提供者
 	out := hash.Sum(nil)
 ```
 
-## 创建Enclave
+### ECREATE指令
+
+指令`ECREATE`用来在EPC内存中初始化一个SESC结构，这个创建一个Enclave的第一步。指令接收两个参数:
+
+* 源SECS结构页信息
+* 目标EPC页地址
+
+指令将源SECS结构拷贝到目标EPC页，并在EPCM设置对应页的信息。
+
+## MRENCLAVE
+
+Measurement Register of enclave build process的简称，用来确认代码和数据在加载到Enclave过程中没有被篡改，计算结果被放在`SECS.MRENCLAVE`字段中，该值可以唯一标识一个Enclave。
+
+```text
+secs.mr_enclave = sha2.initialization();
+do
+   if ECREATE:
+      sesc.mr_enclave=sha2.submit(ECREATE_INFO);
+   else if EADD:
+      sesc.mr_enclave=sha2.submit(EADD_INFO);
+   else if EEXTEND:
+	  sesc.mr_enclave=sha2.submit(EXTEND_INFO);
+   else if EINIT:
+      sesc.mr_enclave=sha2.done();
+      break;
+done;
+```
+
+### ECREATE指令
+
+`ECREATE`指令会参与MRENCLAVE的计算:
+
+* 初始化mrenclave计算:
+
+```text
+secs.mrenclave = sha2.initialization();
+counter = 0;  //用于记录mrenclave更新次数
+```
+
+* 将SESC结构信息更新到mrenclave值
+
+```text
+tmp := [64]byte{}
+tmp[0:7] = 0045544145524345H;  //"ECREATE"
+tmp[8:11]  = SECS.SSAFRAMESIZE
+tmp[12:19] = SECS.SIZE
+tmp[19:63] = 0
+secs.mrenclave = sha2.update(secs.mrenclave, tmp)
+counter += 1;
+```
+
+### EADD指令
+
+`EADD`指令将新添加的EPC页的元信息更新到mrenclave值:
+
+```text
+enclave_offset = page_lineaddr - sesc.baseaddr  //计算新添加的epc页相对enclave基址的偏移
+tmp := [64]byte{}
+tmp[0:7] = 0000000044444145H;   //"EADD"
+tmp[8:15] = enclave_offset;
+tmp[16:63] = sesc_info;
+secs.mrenclave = sha2.update(sesc.mrenclave, tmp);
+counter += 1;
+```
+
+### EEXTEND指令
+
+`EEXTEND`指令将新添加的EPC页内容更新到mrenclave值，每次提交256字节
+
+```text
+//block_lineaddr是epc页中256字节块的起始地址， block是目标块内容
+block := [256]byte{}
+enclave_offset = block_lineaddr - sesc.baseaddr; //epc页中目标块的起始地址与enclave的基址的偏移
+tmp := [64]byte{}
+tmp[0:7] = 00444E4554584545H; //  "EEXTEND"
+tmp[8:15] = enclave_offset;
+tmp[16:63] = 0;
+secs.mrenclave = sha2.update(sesc.mrenclave, tmp);
+counter += 1;
+
+sesc.mrenclave = sha2.update(sesc.mrenclave, block[0:63];
+sesc.mrenclave = sha2.update(sesc.mrenclave, block[64:127];
+sesc.mrenclave = sha2.update(sesc.mrenclave, block[128:191];
+sesc.mrenclave = sha2.update(sesc.mrenclave, block[192:255];
+counter += 4;
+```
+
+### EINIT指令
+
+`EINIT`指令会结束mrenclave的计算过程:
+
+```text
+secs.mrenclave = sha2.final(sesc.mrenclave, count*512);  //counter是mrenclave的更新次数
+```
+
+
+
+
+
+
+
+
+
+
+
+### 
+
+
 
 
 
