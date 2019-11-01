@@ -254,9 +254,194 @@ MRSIGNER用于标识Enclave的代码提供者, 计算方式是对代码提供者
 * 目标Enclave的SECS实例地址
 * 目标EPC页中256字节内存块的地址
 
-指令一次性将EPC页的256字节大小的内存块更新到SECS.ENCLAVE字段中。
+指令一次性将EPC页的256字节大小的内存块更新到SECS.ENCLAVE字段中。\
 
-## MRENCLAVE计算
+## EINIT指令
+
+当所有的代码和数据已经加载到Enclave后，需要对Enclave进行初始化操作，操作结束后就可以执行Enclave里的代码。
+
+### SIGSTRUCT
+
+结构由Enclave开发者构造并签名，在EINIT阶段用来确认Enclave被合法地构造完成。
+
+<table>
+  <thead>
+    <tr>
+      <th style="text-align:left">&#x5B57;&#x6BB5;</th>
+      <th style="text-align:left">&#x504F;&#x79FB;</th>
+      <th style="text-align:left">&#x5927;&#x5C0F;(&#x5B57;&#x8282;)</th>
+      <th style="text-align:left">&#x63CF;&#x8FF0;</th>
+      <th style="text-align:left">&#x662F;&#x5426;&#x7B7E;&#x540D;</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td style="text-align:left">HEADER</td>
+      <td style="text-align:left">0</td>
+      <td style="text-align:left">16</td>
+      <td style="text-align:left">&#x56FA;&#x5B9A;&#x503C;: 06000000E10000000000010000000000H</td>
+      <td style="text-align:left">&#x662F;</td>
+    </tr>
+    <tr>
+      <td style="text-align:left">VENDOR</td>
+      <td style="text-align:left">16</td>
+      <td style="text-align:left">4</td>
+      <td style="text-align:left">
+        <p>Intel Enclave: 00008086H</p>
+        <p>Non-Intel Enclave: 00000000H</p>
+      </td>
+      <td style="text-align:left">&#x662F;</td>
+    </tr>
+    <tr>
+      <td style="text-align:left">DATE</td>
+      <td style="text-align:left">20</td>
+      <td style="text-align:left">4</td>
+      <td style="text-align:left">&#x65E5;&#x671F;</td>
+      <td style="text-align:left">&#x662F;</td>
+    </tr>
+    <tr>
+      <td style="text-align:left">HEADER2</td>
+      <td style="text-align:left">24</td>
+      <td style="text-align:left">16</td>
+      <td style="text-align:left">&#x56FA;&#x5B9A;&#x503C;: 01010000600000006000000001000000H</td>
+      <td style="text-align:left">&#x662F;</td>
+    </tr>
+    <tr>
+      <td style="text-align:left">SWDEFINED</td>
+      <td style="text-align:left">40</td>
+      <td style="text-align:left">4</td>
+      <td style="text-align:left">&#x8F6F;&#x4EF6;&#x81EA;&#x7531;&#x4F7F;&#x7528;</td>
+      <td style="text-align:left">&#x662F;</td>
+    </tr>
+    <tr>
+      <td style="text-align:left">RESERVED</td>
+      <td style="text-align:left">44</td>
+      <td style="text-align:left">84</td>
+      <td style="text-align:left">&#x5FC5;&#x987B;&#x662F;0</td>
+      <td style="text-align:left">&#x662F;</td>
+    </tr>
+    <tr>
+      <td style="text-align:left">MODULUS</td>
+      <td style="text-align:left">128</td>
+      <td style="text-align:left">384</td>
+      <td style="text-align:left">Module Public Key</td>
+      <td style="text-align:left">&#x5426;</td>
+    </tr>
+    <tr>
+      <td style="text-align:left">EXPONENT</td>
+      <td style="text-align:left">512</td>
+      <td style="text-align:left">4</td>
+      <td style="text-align:left">RSA Exponent = 3</td>
+      <td style="text-align:left">&#x5426;</td>
+    </tr>
+    <tr>
+      <td style="text-align:left">SIGNATURE</td>
+      <td style="text-align:left">516</td>
+      <td style="text-align:left">384</td>
+      <td style="text-align:left">&#x7B7E;&#x540D;</td>
+      <td style="text-align:left">&#x5426;</td>
+    </tr>
+    <tr>
+      <td style="text-align:left">MISCSELECT*</td>
+      <td style="text-align:left">900</td>
+      <td style="text-align:left">4</td>
+      <td style="text-align:left">&#x6269;&#x5C55;SSA Frame&#x5C4F;&#x853D;&#x4F4D;&#x5411;&#x91CF;</td>
+      <td
+      style="text-align:left">&#x662F;</td>
+    </tr>
+    <tr>
+      <td style="text-align:left">MISCMASK*</td>
+      <td style="text-align:left">904</td>
+      <td style="text-align:left">4</td>
+      <td style="text-align:left">Bit vector mask of MISCSELECT to enforce</td>
+      <td style="text-align:left">&#x662F;</td>
+    </tr>
+    <tr>
+      <td style="text-align:left">RESERVED</td>
+      <td style="text-align:left">908</td>
+      <td style="text-align:left">4</td>
+      <td style="text-align:left">&#x4FDD;&#x7559;&#xFF0C;&#x5FC5;&#x987B;&#x662F;0</td>
+      <td style="text-align:left">&#x662F;</td>
+    </tr>
+    <tr>
+      <td style="text-align:left">ISVFAMILYID</td>
+      <td style="text-align:left">912</td>
+      <td style="text-align:left">16</td>
+      <td style="text-align:left">ISV assigned Product Family ID</td>
+      <td style="text-align:left">&#x662F;</td>
+    </tr>
+    <tr>
+      <td style="text-align:left">ATTRIBUTES</td>
+      <td style="text-align:left">928</td>
+      <td style="text-align:left">16</td>
+      <td style="text-align:left">Enclave&#x5C5E;&#x6027;</td>
+      <td style="text-align:left">&#x662F;</td>
+    </tr>
+    <tr>
+      <td style="text-align:left">ATTRIBUTEMASK</td>
+      <td style="text-align:left">944</td>
+      <td style="text-align:left">16</td>
+      <td style="text-align:left">Mask of Attributes to enforce</td>
+      <td style="text-align:left">&#x662F;</td>
+    </tr>
+    <tr>
+      <td style="text-align:left">ENCLAVEHASH</td>
+      <td style="text-align:left">960</td>
+      <td style="text-align:left">32</td>
+      <td style="text-align:left">&#x76EE;&#x6807; enclave hash</td>
+      <td style="text-align:left">&#x662F;</td>
+    </tr>
+    <tr>
+      <td style="text-align:left">RESERVED</td>
+      <td style="text-align:left">992</td>
+      <td style="text-align:left">16</td>
+      <td style="text-align:left">Must be zero</td>
+      <td style="text-align:left">&#x662F;</td>
+    </tr>
+    <tr>
+      <td style="text-align:left">ISVEXTPRODID</td>
+      <td style="text-align:left">1008</td>
+      <td style="text-align:left">16</td>
+      <td style="text-align:left">ISV assigned extended Product ID</td>
+      <td style="text-align:left">&#x662F;</td>
+    </tr>
+    <tr>
+      <td style="text-align:left">ISVPRODID</td>
+      <td style="text-align:left">1024</td>
+      <td style="text-align:left">2</td>
+      <td style="text-align:left">ISV assigned Product ID</td>
+      <td style="text-align:left">&#x662F;</td>
+    </tr>
+    <tr>
+      <td style="text-align:left">ISVSVN</td>
+      <td style="text-align:left">1026</td>
+      <td style="text-align:left">2</td>
+      <td style="text-align:left">ISV assigned SVN (security version number)</td>
+      <td style="text-align:left">&#x662F;</td>
+    </tr>
+    <tr>
+      <td style="text-align:left">RESERVED</td>
+      <td style="text-align:left">1028</td>
+      <td style="text-align:left">12</td>
+      <td style="text-align:left">Must be zero</td>
+      <td style="text-align:left">&#x5426;</td>
+    </tr>
+    <tr>
+      <td style="text-align:left">Q1</td>
+      <td style="text-align:left">1040</td>
+      <td style="text-align:left">384</td>
+      <td style="text-align:left">Q1 value for RSA Signature Verification</td>
+      <td style="text-align:left">&#x5426;</td>
+    </tr>
+    <tr>
+      <td style="text-align:left">Q2</td>
+      <td style="text-align:left">1424</td>
+      <td style="text-align:left">384</td>
+      <td style="text-align:left">Q2 value for RSA Signature Verification</td>
+      <td style="text-align:left">&#x5426;</td>
+    </tr>
+  </tbody>
+</table>## MRENCLAVE计算
 
 Measurement Register of enclave build process的简称，用来确认代码和数据在加载到Enclave过程中没有被篡改，计算结果被放在`SECS.MRENCLAVE`字段中，该值可以唯一标识一个Enclave。
 
