@@ -441,7 +441,29 @@ MRSIGNER用于标识Enclave的代码提供者, 计算方式是对代码提供者
       <td style="text-align:left">&#x5426;</td>
     </tr>
   </tbody>
-</table>## MRENCLAVE计算
+</table>### EINITTOKEN
+
+EINIT TOKEN STRUCTURE的简称，用来校验目标Enclave允许启用。EINITTOKEN由`Launch Enclave`生成。
+
+| 字段 | 偏移 | 大小\(字节\) | 描述 | MACed?? |
+| :--- | :--- | :--- | :--- | :--- |
+| Valid | 0 | 4 | 第0位: 1代表有效，0代表无效 | Y |
+| RESERVED | 4 | 44 | 必须是0 | Y |
+| ATTRIBUTES | 48 | 16 | Enclave属性 | Y |
+| MRENCLAVE | 64 | 32 | Enclave的MRENCLAVE值 | Y |
+| RESERVED | 96 | 32 | 保留 | Y |
+| MRSIGNER | 128 | 32 | Enclave的MRSIGNER值 | Y |
+| RESERVED | 160 | 32 | 保留 | Y |
+| CPUSVNLE | 192 | 16 | Launch Enclave’s CPUSVN | N |
+| ISVPRODIDLE | 208 | 2 | Launch Enclave’s ISVPRODID | N |
+| ISVSVNLE | 210 | 2 | Launch Enclave’s ISVSVN | N |
+| RESERVED | 212 | 24 | 保留 | N |
+| MASKEDMISCSELECTLE | 236 | 4 | Launch Enclave’s MASKEDMISCSELECT | N |
+| MASKEDATTRIBUTESLE | 240 | 16 | Launch Enclave’s MASKEDATTRIBUTES | N |
+| KEYID | 256 | 32 | Value for key wear-out protection | N |
+| MAC | 288 | 16 | Message Authentication Code on EINITTOKEN using EINITTOKEN\_KEY | N |
+
+## MRENCLAVE计算
 
 Measurement Register of enclave build process的简称，用来确认代码和数据在加载到Enclave过程中没有被篡改，计算结果被放在`SECS.MRENCLAVE`字段中，该值可以唯一标识一个Enclave。
 
