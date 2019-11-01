@@ -463,6 +463,12 @@ EINIT TOKEN STRUCTURE的简称，用来校验目标Enclave允许启用。EINITTO
 | KEYID | 256 | 32 | Value for key wear-out protection | N |
 | MAC | 288 | 16 | Message Authentication Code on EINITTOKEN using EINITTOKEN\_KEY | N |
 
+### 校验SIGSTRUCT
+
+
+
+
+
 ## MRENCLAVE计算
 
 Measurement Register of enclave build process的简称，用来确认代码和数据在加载到Enclave过程中没有被篡改，计算结果被放在`SECS.MRENCLAVE`字段中，该值可以唯一标识一个Enclave。
