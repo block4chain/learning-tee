@@ -801,7 +801,7 @@ const struct vm_operations_struct sgx_vm_ops = {
 {% endcode-tabs-item %}
 {% endcode-tabs %}
 
-## 引用计数
+### 引用计数
 
 Enclave内核对象存在一个引用计数, 当计数值为0时，会完成对enclave的请理:
 
