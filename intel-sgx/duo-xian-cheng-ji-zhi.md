@@ -34,7 +34,11 @@ Thread Control Structure的简称。在Enclave内执行代码需要关联一个T
 
 ## SSA
 
-STATE SAVE AREA \(SSA\) FRAME的简称。
+STATE SAVE AREA 的简称。
+
+![](../.gitbook/assets/ssa_stack.png)
+
+### 栈帧
 
 在进出Enclave的时候，会将当前处理器的执行上下文保存在SSA帧\(`TCS.CSSA`字段指定的帧\)中。
 
@@ -75,4 +79,36 @@ $$
 * AEP地址
 
 指令清空处理器的Enclave执行模式，恢复`RBP`, `RSP`寄存器，并跳转到目标地址。
+
+## AEX
+
+Asynchronous Enclave Exit的简称。
+
+### EEE
+
+在Enclave执行过程中，会出现诸如异常、中断等事件导致需要离开当前的Enclave执行环境。这些导致Enclave中途退出的事件统称为`EEE(Enclave Exiting Events)`。
+
+### AEX
+
+响应EEE的Enclave退出流程称为AEX\(Asynchronous Enclave Exit\)。在AEX的退出流程中，为保证安全:
+
+* 将Enclave的执行上下文保存在EPC内存中
+* 为相关的寄存器填充固定值
+
+### AEP
+
+Asynchronous Enclave Exit Processor简称。
+
+在异常处理程序执行完毕后，处理器会将执行权限交给AEP。AEP在执行完成后会通过`ERESUME`指令重新回到Enclave
+
+### ERESUME指令
+
+指令`ERESUME`从上一次Enclave退出点继续执行。指令参数:
+
+* TCS实例地址
+* AEP地址
+
+
+
+
 

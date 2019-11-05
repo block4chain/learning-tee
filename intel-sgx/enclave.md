@@ -151,7 +151,7 @@ Intel SGX驱动程序包含如下功能:
 | :--- | :--- | :--- | :--- |
 | SIZE | 0 | 8 | Enclave占用的内存大小，必须是2的幂 |
 | BASEADDR | 8 | 8 | Enclave的起始地址\(虚拟地址\) |
-| SSAFRAMESIZE | 16 | 4 | SSA帧大小 |
+| SSAFRAMESIZE | 16 | 4 | SSA帧大小，以页\(4KB\)为单位 |
 | MISCSELECT | 20 | 4 | 与SSA帧相关，用于存放扩展功能的位向量 |
 | RESERVED | 24 | 24 | 保留位 |
 | ATTRIBUTES | 48 | 16 | Enclave属性 |
