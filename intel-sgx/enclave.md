@@ -465,9 +465,17 @@ EINIT TOKEN STRUCTURE的简称，用来校验目标Enclave允许启用。EINITTO
 
 ### 校验SIGSTRUCT
 
+1. 校验SIGSTRUCT签名
+2. 校验enclave的`secs.enclave`与`SIGSTRUCT.MRENCLAVE`相等
 
+### 校验EINITTOKEN
 
+* EINITTOKEN中的attributes, mrenclave, mrsigner必须和enclave的sesc中的attributes, mrenclave, mrsigner值一致
+* EINITTOKEN用debug launch key创建，则enclave必须处于debug模式
 
+### 初始化Enclave
+
+将enclave的INIT属于置1。
 
 ## MRENCLAVE计算
 
