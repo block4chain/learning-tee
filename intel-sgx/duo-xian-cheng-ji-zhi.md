@@ -4,9 +4,11 @@ description: Enclave内执行代码时上下文安全和保护
 
 # 多线程机制
 
+![](../.gitbook/assets/enclave_mem_layout.png)
+
 ## TCS
 
-Thread Control Structure的简称。在Enclave内执行代码需要关联一个TCS数据结构。每个TCS数据结构实例是4KB对齐。
+Thread Control Structure的简称。在Enclave内执行代码需要关联一个TCS数据结构。每个TCS数据结构实例是4KB对齐，占用一个单独的EPC页。
 
 | 字段 | 偏移 | 大小\(字节\) | 描述 |
 | :--- | :--- | :--- | :--- |
@@ -34,7 +36,7 @@ Thread Control Structure的简称。在Enclave内执行代码需要关联一个T
 
 STATE SAVE AREA \(SSA\) FRAME的简称。
 
-Enclave执行代码过程中，如果出现一些异常事件需要离开Enclave环境，则会当前处理器的执行上下文保存在SSA帧\(`TCS.CSSA`字段指定的帧\)中。
+在进出Enclave的时候，会将当前处理器的执行上下文保存在SSA帧\(`TCS.CSSA`字段指定的帧\)中。
 
 | 区域 | 偏移 | 大小 | 描述 |
 | :--- | :--- | :--- | :--- |
@@ -45,5 +47,32 @@ Enclave执行代码过程中，如果出现一些异常事件需要离开Enclave
 
 ### GPRSGX区域
 
- 包含CPU在执行过程中的上下文: 寄存器等值 
+ 包含CPU在执行过程中的上下文: 寄存器等值
+
+## EENTER指令
+
+指令`EENTER`会将执行交给指定的Enclave，指令参数包括:
+
+* TCS实例地址
+* AEP处理程序地址
+
+指令将处理器状态置为Enclave执行模式，并且跳转到地址:
+
+$$
+PC = SESC.BASEADDR+TCS.OENTRY
+$$
+
+### 执行上下文
+
+* 寄存器`RBP`, `RSP`会保存在当前的SSA帧中，并在退出Enclave时恢复
+* AEP处理程序会保存在`TCS.AEP`中
+
+## EEXIT指令
+
+指令EEXIT会将执行交给Enclave外的代码, 指令参数:
+
+* 跳转目标地址\(Enclave外部\)
+* AEP地址
+
+指令清空处理器的Enclave执行模式，恢复`RBP`, `RSP`寄存器，并跳转到目标地址。
 
