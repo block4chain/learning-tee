@@ -563,19 +563,3 @@ counter += 4;
 secs.mrenclave = sha2.final(sesc.mrenclave, count*512);  //counter是mrenclave的更新次数
 ```
 
-
-
-
-
-
-
-
-
-
-
-### 
-
-
-
-
-
